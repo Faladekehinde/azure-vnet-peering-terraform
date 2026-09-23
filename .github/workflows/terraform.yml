@@ -2,6 +2,15 @@ name: Terraform VNet Peering
 
 on:
   workflow_dispatch:
+    inputs:
+      operation:
+        description: Choose whether to apply or destroy the lab
+        required: true
+        default: apply
+        type: choice
+        options:
+          - apply
+          - destroy
 
 permissions:
   id-token: write
@@ -25,3 +34,37 @@ jobs:
     steps:
       - name: Check out repository
         uses: actions/checkout@v7.0.1
+
+      - name: Set up Terraform
+        uses: hashicorp/setup-terraform@v4.0.1
+        with:
+          terraform_version: "1.16.3"
+
+      - name: Check Terraform formatting
+        run: terraform fmt -check
+
+      - name: Initialize Terraform
+        run: >-
+          terraform init -input=false
+          -backend-config="storage_account_name=${{ vars.AZURE_STORAGE_ACCOUNT }}"
+          -backend-config="container_name=tfstate"
+          -backend-config="key=vnet-peering.tfstate"
+
+      - name: Validate Terraform
+        run: terraform validate
+
+      - name: Create apply plan
+        if: inputs.operation == 'apply'
+        run: terraform plan -input=false -out=tfplan
+
+      - name: Apply saved plan
+        if: inputs.operation == 'apply'
+        run: terraform apply -input=false tfplan
+
+      - name: Create destroy plan
+        if: inputs.operation == 'destroy'
+        run: terraform plan -destroy -input=false -out=destroy.tfplan
+
+      - name: Apply destroy plan
+        if: inputs.operation == 'destroy'
+        run: terraform apply -input=false destroy.tfplan
